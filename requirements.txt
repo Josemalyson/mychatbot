@@ -1,0 +1,6 @@
+streamlit
+langchain
+python-dotenv
+langchain_community
+chromadb
+streamlit_js_eval
