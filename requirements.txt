@@ -9,4 +9,4 @@ PyPDF2
 openai
 langchain_openai
 pypdf
-
+huggingface_hub

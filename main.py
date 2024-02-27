@@ -4,7 +4,9 @@ from io import StringIO
 
 import streamlit as st
 from dotenv import load_dotenv
+from langchain.callbacks import streaming_stdout
 from langchain.chains import LLMChain
+from langchain_community.llms.huggingface_endpoint import HuggingFaceEndpoint
 from langchain_community.llms.ollama import Ollama
 from langchain_core.callbacks import CallbackManager, StreamingStdOutCallbackHandler
 from langchain_core.prompts import PromptTemplate
@@ -16,6 +18,9 @@ load_dotenv()
 openai_api_key = os.getenv('OPENAI_API_KEY')
 model = os.getenv('MODEL')
 client = OpenAI(api_key=openai_api_key)
+huggingfacehub_api_token = os.getenv('HUGGINGFACEHUB_API_TOKEN')
+
+repo_id = "mistralai/Mixtral-8x7B-Instruct-v0.1"  # See https://huggingface.co/models?pipeline_tag=text-generation&sort=downloads for some other options
 
 # App title
 st.set_page_config(page_title="🦙💬 Llama 2 Chatbot")
@@ -36,7 +41,11 @@ with st.sidebar:
     elif selected_model == 'OpenAI':
         llm = ChatOpenAI(temperature=temperature, model=model, openai_api_key=openai_api_key, streaming=True)
     elif selected_model == 'Mistral':
-        llm = ''
+        callbacks = [streaming_stdout.StreamingStdOutCallbackHandler()]
+        llm = HuggingFaceEndpoint(
+            repo_id=repo_id, temperature=temperature,
+            huggingfacehub_api_token=huggingfacehub_api_token, callbacks=callbacks,
+        )
 
     st.markdown(
         '📖 Learn how to build this app in this [blog](https://blog.streamlit.io/how-to-build-a-llama-2-chatbot/)!')
@@ -95,6 +104,10 @@ def response_chatgpt():
     return st.write_stream(stream)
 
 
+def response_huggingface(question):
+    return llm(question)
+
+
 uploaded_url = st.text_input("Choose Site URL")
 uploaded_youtube_url = st.text_input("Choose Youtube URL")
 uploaded_file = st.file_uploader("Choose a file")
@@ -144,7 +157,7 @@ if st.session_state.messages[-1]["role"] != "assistant":
                 message = {"role": "assistant", "content": response}
 
             elif selected_model == 'Mistral':
-                response = 'ainda nao implementado'
+                response = response_huggingface(prompt)
                 message = {"role": "assistant", "content": response}
                 st.write(response)
 
