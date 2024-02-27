@@ -1,24 +1,42 @@
+import os
+import time
 from io import StringIO
 
 import streamlit as st
+from dotenv import load_dotenv
+from langchain.chains import LLMChain
+from langchain_community.llms.ollama import Ollama
+from langchain_core.callbacks import CallbackManager, StreamingStdOutCallbackHandler
+from langchain_core.prompts import PromptTemplate
+from langchain_openai import ChatOpenAI
+from openai import OpenAI
 from streamlit_js_eval import streamlit_js_eval
+
+load_dotenv()
+openai_api_key = os.getenv('OPENAI_API_KEY')
+model = os.getenv('MODEL')
+client = OpenAI(api_key=openai_api_key)
 
 # App title
 st.set_page_config(page_title="🦙💬 Llama 2 Chatbot")
 
-# Replicate Credentials
 with st.sidebar:
     st.title('🦙💬 Llama 2 Chatbot')
     st.subheader('Models and parameters')
     selected_model = st.sidebar.selectbox('Choose a Llama2 model', ['Llama2', 'OpenAI', 'Mistral'],
                                           key='selected_model')
+
+    temperature = st.sidebar.slider('temperature', min_value=0.1, max_value=1.0, value=0.1, step=0.1)
+
     if selected_model == 'Llama2':
-        llm = ''
+        llm = Ollama(model='llama2', base_url='http://localhost:11434',
+                     callback_manager=CallbackManager([StreamingStdOutCallbackHandler()])
+                     , temperature=temperature)
+
     elif selected_model == 'OpenAI':
-        llm = ''
+        llm = ChatOpenAI(temperature=temperature, model=model, openai_api_key=openai_api_key, streaming=True)
     elif selected_model == 'Mistral':
         llm = ''
-    temperature = st.sidebar.slider('temperature', min_value=0.1, max_value=1.0, value=0.1, step=0.1)
 
     st.markdown(
         '📖 Learn how to build this app in this [blog](https://blog.streamlit.io/how-to-build-a-llama-2-chatbot/)!')
@@ -41,18 +59,40 @@ def clear_chat_history():
 st.sidebar.button('Clear Chat History', on_click=clear_chat_history)
 
 
-# Function for generating LLaMA2 response. Refactored from https://github.com/a16z-infra/llama2-chatbot
-def generate_llama2_response(prompt_input):
-    string_dialogue = ("You are a helpful assistant. You do not respond as 'User' or pretend to be 'User'. You only "
-                       "respond once as 'Assistant'.")
-    for dict_message in st.session_state.messages:
-        if dict_message["role"] == "user":
-            string_dialogue += "User: " + dict_message["content"] + "\n\n"
-        else:
-            string_dialogue += "Assistant: " + dict_message["content"] + "\n\n"
-    output = 'resposta'
+def response_ollama(question):
+    template = """
 
-    return output
+    <<SYS>> Você é um assistente pessoal de AI. <</SYS>>
+    [INST] Responda todas as perguntas de forma simples e objetivo no idoma português. Ao final de cada resposta adicione o modelo
+        que você é exemplos: gpt-turbo, ollama e entre outros.
+        {question} 
+    [/INST]
+
+    """
+
+    prompt_template = PromptTemplate(input_variables=['question'], output_parser=None, partial_variables={},
+                                     template=template,
+                                     template_format='f-string', validate_template=True)
+
+    llm_chain = LLMChain(prompt=prompt_template, llm=llm)
+    response_llm = llm_chain.run({"question": question})
+
+    for word in response_llm.split():
+        yield word + " "
+        time.sleep(0.05)
+
+
+def response_chatgpt():
+    # default chat without context
+    stream = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": m["role"], "content": m["content"]}
+            for m in st.session_state.messages
+        ],
+        stream=True,
+    )
+    return st.write_stream(stream)
 
 
 uploaded_url = st.text_input("Choose Site URL")
@@ -88,12 +128,24 @@ if prompt := st.chat_input():
 if st.session_state.messages[-1]["role"] != "assistant":
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            response = generate_llama2_response(prompt)
-            placeholder = st.empty()
-            full_response = ''
-            for item in response:
-                full_response += item
+
+            if selected_model == 'Llama2':
+                response = response_ollama(prompt)
+                placeholder = st.empty()
+                full_response = ''
+                for item in response:
+                    full_response += item
+                    placeholder.markdown(full_response)
                 placeholder.markdown(full_response)
-            placeholder.markdown(full_response)
-    message = {"role": "assistant", "content": full_response}
+                message = {"role": "assistant", "content": full_response}
+
+            elif selected_model == 'OpenAI':
+                response = response_chatgpt()
+                message = {"role": "assistant", "content": response}
+
+            elif selected_model == 'Mistral':
+                response = 'ainda nao implementado'
+                message = {"role": "assistant", "content": response}
+                st.write(response)
+
     st.session_state.messages.append(message)

@@ -1,0 +1,12 @@
+- Explicação sobre IA Generativa
+- Modelos de IA
+- Plataforma para encontrar modelos openAI, HuggingFaces e Ollama
+- Comparar modelos
+- Explicar langchain
+- Explicar modelo RAG
+    - loaders
+    - split
+    - embedding
+    - store
+    - qa invoke
+- Apresentação de código

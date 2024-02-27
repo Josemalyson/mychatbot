@@ -4,3 +4,9 @@ python-dotenv
 langchain_community
 chromadb
 streamlit_js_eval
+requests
+PyPDF2
+openai
+langchain_openai
+pypdf
+
