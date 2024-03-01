@@ -7,7 +7,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import UnstructuredURLLoader, YoutubeLoader, UnstructuredFileLoader
 from langchain_community.llms.huggingface_endpoint import HuggingFaceEndpoint
 from langchain_community.llms.ollama import Ollama
-from langchain_community.vectorstores.chroma import Chroma
+from langchain_community.vectorstores import Chroma
 from langchain_core.callbacks import CallbackManager, StreamingStdOutCallbackHandler, streaming_stdout
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
@@ -19,8 +19,9 @@ from streamlit_js_eval import streamlit_js_eval
 load_dotenv()
 model = os.getenv('MODEL')
 openai_api_key = os.getenv('OPENAI_API_KEY')
-huggingfacehub_api_token = os.getenv('HUGGINGFACEHUB_API_TOKEN')
-repo_id = "mistralai/Mixtral-8x7B-Instruct-v0.1"  # See https://huggingface.co/models?pipeline_tag=text-generation&sort=downloads for some other options
+humbugging_api_token = os.getenv('HUGGINGFACEHUB_API_TOKEN')
+repo_id = "mistralai/Mixtral-8x7B-Instruct-v0.1"
+docs = [Document(page_content=' none ')]
 
 # App title
 st.set_page_config(page_title="🦙💬 Llama 2 Chatbot")
@@ -28,13 +29,13 @@ st.set_page_config(page_title="🦙💬 Llama 2 Chatbot")
 with st.sidebar:
     st.title('🦙💬 Llama 2 Chatbot')
     st.subheader('Models and parameters')
-    selected_model = st.sidebar.selectbox('Choose a Llama2 model', ['Llama2', 'OpenAI', 'Mistral'],
+    selected_model = st.sidebar.selectbox('Choose a model', ['Gemma', 'OpenAI', 'Mistral'],
                                           key='selected_model')
 
     temperature = st.sidebar.slider('temperature', min_value=0.1, max_value=1.0, value=0.1, step=0.1)
 
-    if selected_model == 'Llama2':
-        llm = Ollama(model='llama2', base_url='http://localhost:11434',
+    if selected_model == 'Gemma':
+        llm = Ollama(model='gemma', base_url='http://localhost:11434',
                      callback_manager=CallbackManager([StreamingStdOutCallbackHandler()])
                      , temperature=temperature)
 
@@ -45,7 +46,7 @@ with st.sidebar:
         callbacks = [streaming_stdout.StreamingStdOutCallbackHandler()]
         llm = HuggingFaceEndpoint(
             repo_id=repo_id, temperature=temperature,
-            huggingfacehub_api_token=huggingfacehub_api_token, callbacks=callbacks,
+            huggingfacehub_api_token=humbugging_api_token, callbacks=callbacks,
         )
 
     uploaded_url = st.text_input("Choose Site URL")
@@ -65,8 +66,8 @@ for message in st.session_state.messages:
         st.write(message["content"])
 
 
-def format_docs(docs):
-    return "\n\n".join(doc.page_content for doc in docs)
+def format_docs(data):
+    return "\n\n".join(doc.page_content for doc in data)
 
 
 def clear_chat_history():
@@ -77,74 +78,17 @@ def clear_chat_history():
 st.sidebar.button('Clear Chat History', on_click=clear_chat_history)
 
 
-def load_url_docs():
-    # Load, chunk and index the contents of the blog.
-    loader = UnstructuredURLLoader(urls=[uploaded_url])
-    docs = loader.load()
+# Generate a new response if last message is not from assistant
+def rag(question, retrievers):
+    template = """Você é um assistenten pessoal que responde no idioma português do Brasil as perguntas do usuário, 
+    onde o mesmo enviaria uma questão e você entenderá o contexto enviado e com palavras simples explicará com 
+    detalhes a reposta.
 
-    print(docs)
+    Question: {question} 
 
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    splits = text_splitter.split_documents(docs)
-    vectorstore = Chroma.from_documents(documents=splits, embedding=OpenAIEmbeddings())
+    Context: {context} 
 
-    # Retrieve and generate using the relevant snippets of the blog.
-    return vectorstore.as_retriever()
-
-
-def load_url_youtube_docs():
-    loader = YoutubeLoader.from_youtube_url(
-        uploaded_youtube_url,
-        add_video_info=True,
-        language=["pt"],
-        translation="pt",
-    )
-    docs = loader.load()
-
-    print(docs)
-
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    splits = text_splitter.split_documents(docs)
-    vectorstore = Chroma.from_documents(documents=splits, embedding=OpenAIEmbeddings())
-
-    # Retrieve and generate using the relevant snippets of the blog.
-    return vectorstore.as_retriever()
-
-
-def load_files():
-    # Create tmp file
-    temp_dir = tempfile.TemporaryDirectory()
-    temp_filepath = os.path.join(temp_dir.name, uploaded_file.name)
-    with open(temp_filepath, "wb") as f:
-        f.write(uploaded_file.getvalue())
-    loader = UnstructuredFileLoader(temp_filepath)
-    docs = loader.load()
-
-    print(docs)
-
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    splits = text_splitter.split_documents(docs)
-    # OllamaEmbeddings
-    vectorstore = Chroma.from_documents(documents=splits, embedding=OpenAIEmbeddings())
-
-    # Retrieve and generate using the relevant snippets of the blog.
-    return vectorstore.as_retriever()
-
-
-def response_ollama(question, retrievers):
-    template = """
-
-    <<SYS>>Você é um assistenten pessoal que responde no idioma português do Brasil as perguntas do usuário, 
-        onde o mesmo enviaria uma questão e você entenderá o contexto enviado e com palavras simples explicará com 
-        detalhes a reposta. <</SYS>>
-    [INST]
-        Question: {question} 
-        
-        Context: {context} 
-        Answer: Responda com educação e de forma simples.
-
-    [/INST]
-
+    Answer: Responda com educação e de forma simples.
     """
 
     prompt_template = PromptTemplate(input_variables=['question', 'context'], output_parser=None, partial_variables={},
@@ -158,71 +102,7 @@ def response_ollama(question, retrievers):
             | StrOutputParser()
     )
 
-    response_llm = rag_chain.invoke(question)
-
-    return response_llm
-
-
-def response_chatgpt(question, retrievers):
-    template = (
-        """Você é um assistenten pessoal que responde no idioma português do Brasil as perguntas do usuário, 
-        onde o mesmo enviaria uma questão e você entenderá o contexto enviado e com palavras simples explicará com 
-        detalhes a reposta.
-        
-        Question: {question} 
-        
-        Context: {context} 
-        
-        Answer: Responda com educação e de forma simples.
-        """
-
-    )
-
-    prompt_template = PromptTemplate(input_variables=['question', 'context'], output_parser=None, partial_variables={},
-                                     template=template,
-                                     template_format='f-string', validate_template=True)
-
-    rag_chain = (
-            {"context": retrievers | format_docs, "question": RunnablePassthrough()}
-            | prompt_template
-            | llm
-            | StrOutputParser()
-    )
-
-    response_gtp = rag_chain.invoke(question)
-
-    return response_gtp
-
-
-def response_huggingface(question, retrievers):
-    template = (
-        """Você é um assistenten pessoal que responde no idioma português do Brasil as perguntas do usuário, 
-        onde o mesmo enviaria uma questão e você entenderá o contexto enviado e com palavras simples explicará com 
-        detalhes a reposta.
-
-        Question: {question} 
-        
-        Context: {context} 
-        
-        Answer: Responda com educação e de forma simples.
-        """
-
-    )
-
-    prompt_template = PromptTemplate(input_variables=['question', 'context'], output_parser=None, partial_variables={},
-                                     template=template,
-                                     template_format='f-string', validate_template=True)
-
-    rag_chain = (
-            {"context": retrievers | format_docs, "question": RunnablePassthrough()}
-            | prompt_template
-            | llm
-            | StrOutputParser()
-    )
-
-    response_hf = rag_chain.invoke(question)
-
-    return response_hf
+    return rag_chain.invoke(question)
 
 
 # User-provided prompt
@@ -231,29 +111,42 @@ if prompt := st.chat_input():
     with st.chat_message("user"):
         st.write(prompt)
 
-# Generate a new response if last message is not from assistant
 if st.session_state.messages[-1]["role"] != "assistant":
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
 
-            retriever = Chroma.from_documents(documents=[Document(page_content='')],
-                                              embedding=OpenAIEmbeddings()).as_retriever()
-
             if uploaded_url is not None and uploaded_url != '':
-                retriever = load_url_docs()
+                loader = UnstructuredURLLoader(urls=[uploaded_url])
+                docs = loader.load()
 
             if uploaded_youtube_url is not None and uploaded_youtube_url != '':
-                retriever = load_url_youtube_docs()
+                loader = YoutubeLoader.from_youtube_url(
+                    uploaded_youtube_url,
+                    add_video_info=True,
+                    language=["pt"],
+                    translation="pt",
+                )
+                docs = loader.load()
 
             if uploaded_file is not None and uploaded_file != '':
-                retriever = load_files()
+                # Create tmp file
+                temp_dir = tempfile.TemporaryDirectory()
+                temp_filepath = os.path.join(temp_dir.name, uploaded_file.name)
+                with open(temp_filepath, "wb") as f:
+                    f.write(uploaded_file.getvalue())
+                loader = UnstructuredFileLoader(temp_filepath)
+                docs = loader.load()
 
-            if selected_model == 'Llama2':
-                response = response_ollama(prompt, retriever)
-            elif selected_model == 'OpenAI':
-                response = response_chatgpt(prompt, retriever)
-            elif selected_model == 'Mistral':
-                response = response_huggingface(prompt, retriever)
+            print(docs)
+
+            text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+            splits = text_splitter.split_documents(docs)
+
+            vectorstore = Chroma.from_documents(documents=splits, embedding=OpenAIEmbeddings())
+            retriever = vectorstore.as_retriever()
+
+            response = rag(prompt, retriever)
+            vectorstore.delete_collection()
 
         st.write(response)
     st.session_state.messages.append({"role": "assistant", "content": response})

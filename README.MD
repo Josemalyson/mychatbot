@@ -1,3 +1,10 @@
+# Models
+https://huggingface.co/models?pipeline_tag=text-generation&sort=downloads
+
+https://ollama.com/library
+
+https://aws.amazon.com/bedrock/?refid=82b1c10f-8aa4-4e6c-ab52-c75550a4a31e
+
 # Install ollama in localhost
 
     curl -fsSL https://ollama.com/install.sh | sh
