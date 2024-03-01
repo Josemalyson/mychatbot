@@ -10,3 +10,8 @@ openai
 langchain_openai
 pypdf
 huggingface_hub
+bs4
+unstructured
+youtube-transcript-api
+pytube
+unstructured[all-docs]
