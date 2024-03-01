@@ -1,16 +1,15 @@
 import os
 import tempfile
-from io import StringIO
 
 import streamlit as st
 from dotenv import load_dotenv
-from langchain.chains import LLMChain
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import UnstructuredURLLoader, YoutubeLoader, UnstructuredFileLoader
 from langchain_community.llms.huggingface_endpoint import HuggingFaceEndpoint
 from langchain_community.llms.ollama import Ollama
 from langchain_community.vectorstores.chroma import Chroma
 from langchain_core.callbacks import CallbackManager, StreamingStdOutCallbackHandler, streaming_stdout
+from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
@@ -125,31 +124,43 @@ def load_files():
 
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     splits = text_splitter.split_documents(docs)
+    # OllamaEmbeddings
     vectorstore = Chroma.from_documents(documents=splits, embedding=OpenAIEmbeddings())
 
     # Retrieve and generate using the relevant snippets of the blog.
     return vectorstore.as_retriever()
 
 
-def response_ollama(question):
+def response_ollama(question, retrievers):
     template = """
 
     <<SYS>>Você é um assistenten pessoal que responde no idioma português do Brasil as perguntas do usuário, 
         onde o mesmo enviaria uma questão e você entenderá o contexto enviado e com palavras simples explicará com 
         detalhes a reposta. <</SYS>>
     [INST]
-        {question} 
+        Question: {question} 
+        
+        Context: {context} 
+        Answer: Responda com educação e de forma simples.
+
     [/INST]
 
     """
 
-    prompt_template = PromptTemplate(input_variables=['question'], output_parser=None, partial_variables={},
+    prompt_template = PromptTemplate(input_variables=['question', 'context'], output_parser=None, partial_variables={},
                                      template=template,
                                      template_format='f-string', validate_template=True)
 
-    llm_chain = LLMChain(prompt=prompt_template, llm=llm)
-    response_llm = llm_chain.invoke({"question": question})
-    return response_llm['text']
+    rag_chain = (
+            {"context": retrievers | format_docs, "question": RunnablePassthrough()}
+            | prompt_template
+            | llm
+            | StrOutputParser()
+    )
+
+    response_llm = rag_chain.invoke(question)
+
+    return response_llm
 
 
 def response_chatgpt(question, retrievers):
@@ -183,45 +194,36 @@ def response_chatgpt(question, retrievers):
     return response_gtp
 
 
-def response_huggingface(question):
+def response_huggingface(question, retrievers):
     template = (
         """Você é um assistenten pessoal que responde no idioma português do Brasil as perguntas do usuário, 
         onde o mesmo enviaria uma questão e você entenderá o contexto enviado e com palavras simples explicará com 
         detalhes a reposta.
 
-        Pergunta: {question}
+        Question: {question} 
+        
+        Context: {context} 
+        
         Answer: Responda com educação e de forma simples.
         """
 
     )
 
-    prompt_template = PromptTemplate(input_variables=['question'], output_parser=None, partial_variables={},
+    prompt_template = PromptTemplate(input_variables=['question', 'context'], output_parser=None, partial_variables={},
                                      template=template,
                                      template_format='f-string', validate_template=True)
-    llm_chain = LLMChain(prompt=prompt_template, llm=llm)
-    response_hf = llm_chain.invoke(question)
 
-    return response_hf['text']
+    rag_chain = (
+            {"context": retrievers | format_docs, "question": RunnablePassthrough()}
+            | prompt_template
+            | llm
+            | StrOutputParser()
+    )
 
+    response_hf = rag_chain.invoke(question)
 
-if uploaded_url is not None and uploaded_url != '':
-    # To read file as bytes:
-    bytes_data = uploaded_file.getvalue()
-    st.write(bytes_data)
+    return response_hf
 
-    # To convert to a string based IO:
-    stringio = StringIO(uploaded_file.getvalue().decode("utf-8"))
-    st.write(stringio)
-
-    # To read file as string:
-    string_data = stringio.read()
-    st.write(string_data)
-
-if uploaded_url is not None:
-    st.write(uploaded_url)
-
-if uploaded_youtube_url is not None:
-    st.write(uploaded_youtube_url)
 
 # User-provided prompt
 if prompt := st.chat_input():
@@ -234,6 +236,9 @@ if st.session_state.messages[-1]["role"] != "assistant":
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
 
+            retriever = Chroma.from_documents(documents=[Document(page_content='')],
+                                              embedding=OpenAIEmbeddings()).as_retriever()
+
             if uploaded_url is not None and uploaded_url != '':
                 retriever = load_url_docs()
 
@@ -244,10 +249,11 @@ if st.session_state.messages[-1]["role"] != "assistant":
                 retriever = load_files()
 
             if selected_model == 'Llama2':
-                response = response_ollama(prompt)
+                response = response_ollama(prompt, retriever)
             elif selected_model == 'OpenAI':
                 response = response_chatgpt(prompt, retriever)
             elif selected_model == 'Mistral':
-                response = response_huggingface(prompt)
+                response = response_huggingface(prompt, retriever)
+
         st.write(response)
     st.session_state.messages.append({"role": "assistant", "content": response})
