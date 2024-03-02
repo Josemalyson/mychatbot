@@ -1,15 +1,31 @@
+# streamlit
 streamlit
-langchain
-python-dotenv
-langchain_community
-chromadb
 streamlit_js_eval
-requests
-PyPDF2
-openai
+
+# langchain
+langchain
+langchainhub
+langchain_community
 langchain_openai
+
+# vector database
+chromadb
+
+# opneai
+openai
+
+# docs
 pypdf
+pdfminer
+pdfminer.six
+pytesseract
+
+# huggingface
 huggingface_hub
+
+# python dev
+python-dotenv
+requests
 bs4
 unstructured
 youtube-transcript-api

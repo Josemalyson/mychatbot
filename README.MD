@@ -1,9 +1,27 @@
+# Summary
+
+- O que é Generative AI
+- O que é Modelos
+  - https://gpt4all.io/index.html
+  - https://huggingface.co/models?pipeline_tag=text-generation&sort=downloads
+  - https://ollama.com/library
+  - https://aws.amazon.com/bedrock/?refid=82b1c10f-8aa4-4e6c-ab52-c75550a4a31e
+  
+- Frameworks
+  - LangChain
+  - ![img.png](img.png)
+    - https://python.langchain.com/docs/get_started
+    - LangChain Expression Language (LCEL) - https://python.langchain.com/docs/expression_language/
+    - Integrações 
+      - https://python.langchain.com/docs/integrations/providers/
+      - https://python.langchain.com/docs/integrations/components
+- O que é RAG
+  - https://python.langchain.com/docs/use_cases/question_answering/
+  - https://python.langchain.com/docs/use_cases/question_answering/quickstart
+- Arquitetura RAG
+
 # Models
-https://huggingface.co/models?pipeline_tag=text-generation&sort=downloads
 
-https://ollama.com/library
-
-https://aws.amazon.com/bedrock/?refid=82b1c10f-8aa4-4e6c-ab52-c75550a4a31e
 
 # Install ollama in localhost
 
